@@ -31,7 +31,7 @@ const server = http.createServer((req, res) => { // Server create karna
         const new_date = new_el_children.first().attr('title');
         const old_results = old_el_children.not(':first-child');
         const new_results = new_el_children.not(':first-child');
-        const obj = {}; // sk results
+        let obj = {}; // sk results
         
         for (let i=0; i<4; i++) obj[names.eq(i).html().trim()] = { old: old_results.eq(i).html().trim(), new: new_results.eq(i).html().trim() };
 
@@ -84,7 +84,7 @@ const server = http.createServer((req, res) => { // Server create karna
             }
         }
         
-        obj["date"] = { old: old_date, new: new_date }
+        obj = { date: { old: old_date, new: new_date }, ...obj };
 
         let text = '<!doctypehtml><html lang=en><meta charset=UTF-8><meta content="width=device-width,initial-scale=1"name=viewport><title>SK results</title><style>tr{border-bottom:1px solid #ddd}table{width:95vw}th{text-align:left}</style><body>';
         let header = "<tr>";
