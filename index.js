@@ -90,9 +90,8 @@ const server = http.createServer((req, res) => { // Server create karna
         let header = "<tr>";
         let neww = header;
         let old = header;
-        const keys = Object.keys(obj);
 
-        keys.forEach(key => {
+        Object.keys(obj).forEach(key => {
             header += `<th>${key}</th>`;
             old += `<td>${obj[key]['old']}</td>`;
             neww += `<td>${obj[key]['new']}</td>`;
