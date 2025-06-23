@@ -4,7 +4,7 @@ const cheerio = require('cheerio');
 
 function IST_date() {
     const options = {
-        timeZone: 'IST',
+        timeZone: 'Asia/Kolkata',
         year: '2-digit',
         month: '2-digit',
         day: '2-digit',
@@ -13,109 +13,250 @@ function IST_date() {
         second: '2-digit',
         hour12: false
     };
-    const ist_date = new Date(new Date().toLocaleString('en-US', options));
-
-    return ist_date;
+    return new Date(new Date().toLocaleString('en-US', options));
 }
 
-const server = http.createServer((req, res) => { // Server create karna
-    axios.get("https://satta-king-fast.com")
-    .then(response => {
-        const data = response.data;
-        const $ = cheerio.load(data);
-        const table = $('#mix-chart > table tr');
-        const names = table.eq(1).find('th'); // list of name elements, length 4
-        const old_el_children = table.eq(table.length - 4).children(); // second last element
-        const new_el_children = table.eq(table.length - 3).children(); // last element of the list
-        const old_date = old_el_children.first().attr('title');
-        const new_date = new_el_children.first().attr('title');
-        const old_results = old_el_children.not(':first-child');
-        const new_results = new_el_children.not(':first-child');
-        let obj = {}; // sk results
+function scrapeCompleteTable($) {
+    const table = $('#mix-chart > table tr');
+    let completeData = [];
+    
+    // Get table headers (game names)
+    const headers = [];
+    const headerRow = table.eq(1);
+    headerRow.find('th').each((i, el) => {
+        headers.push($(el).text().trim());
+    });
+    
+    // Get all data rows (skip first 2 rows - they are headers, skip last 2 rows)
+    for (let i = 2; i < table.length - 2; i++) {
+        const row = table.eq(i);
+        const cells = row.children();
         
-        for (let i=0; i<4; i++) obj[names.eq(i).html().trim()] = { old: old_results.eq(i).html().trim(), new: new_results.eq(i).html().trim() };
-
-        if (!req.headers['user-agent'].includes('Mozilla')) {
-            if (!Object.hasOwn(req.headers, 'full-data')) { // Return type text
-                const date = IST_date();
-                const hours = date.getHours();
-                // const minutes = date.getMinutes();
-
-                res.writeHead(200, { 'Content-Type': 'text/plain' });
-
-                if (hours >= 18 && hours < 21) { // faridabad
-                    let result = obj["FRBD"]["new"];
-                    if (result == "XX") {
-                        res.end("no-data");
-                        return;
-                    }
-                    res.end(`Faridabad ${result}`);
-                    return;
-                } else if (hours => 21 && hours < 0) { // gaziabad
-                    let result = obj["GZBD"]["new"];
-                    if (result == "XX") {
-                        res.end("no-data");
-                        return;
-                    }
-                    res.end(`Gaziabad ${result}`);
-                    return;
-                } else if (hours => 0 && hours < 4) { // gali
-                    let result = obj["GALI"]["new"];
-                    if (result == "XX") {
-                        res.end("no-data");
-                        return;
-                    }
-                    res.end(`Gali ${result}`);
-                    return;
-                } else { // all, inc. disawer
-                    let results = [];
-                    for (let key in obj) {
-                        let res = obj[key]['new'];
-                        if (res == "XX") res = obj[key]['old'] + " *"
-                        results.push(`${key} ${res}`);
-                    }
-                    res.end(results.join("\n"));
-                    return;
+        if (cells.length > 0) {
+            let rowData = {};
+            
+            // First cell is usually date/time
+            const dateCell = cells.first();
+            rowData.date = dateCell.attr('title') || dateCell.text().trim();
+            
+            // Rest are game results
+            cells.not(':first-child').each((j, cell) => {
+                if (j < headers.length) {
+                    rowData[headers[j]] = $(cell).text().trim();
                 }
-            } else { // Return type json
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify(obj));
-                return;
+            });
+            
+            completeData.push(rowData);
+        }
+    }
+    
+    return { headers, data: completeData };
+}
+
+function generateHTMLTable(tableData) {
+    const { headers, data } = tableData;
+    
+    let html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Satta King Complete Results</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin: 20px 0 30px 0;
+            font-size: 36px;
+        }
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0;
+        }
+        th, td {
+            padding: 20px 12px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            font-size: 24px;
+        }
+        th:first-child, td:first-child {
+            width: 120px;
+            font-size: 22px;
+            font-weight: bold;
+        }
+        th:not(:first-child), td:not(:first-child) {
+            width: 150px;
+            font-size: 32px;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .date-column {
+            background-color: #e8f5e8;
+            font-weight: bold;
+        }
+        .no-data {
+            color: #999;
+            font-style: italic;
+        }
+        tr:hover {
+            background-color: #fff3cd !important;
+            border: 2px solid #ffc107;
+        }
+        .update-time {
+            text-align: center;
+            color: #666;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+        @media (max-width: 768px) {
+            body {
+                padding: 0;
+            }
+            th, td {
+                padding: 15px 8px;
+                font-size: 20px;
+            }
+            th:first-child, td:first-child {
+                font-size: 18px;
+            }
+            th:not(:first-child), td:not(:first-child) {
+                font-size: 24px;
+            }
+            h1 {
+                font-size: 28px;
+                margin: 10px 0 20px 0;
             }
         }
-        
-        obj = { date: { old: old_date, new: new_date }, ...obj };
-
-        let text = '<!doctypehtml><html lang=en><meta charset=UTF-8><meta content="width=device-width,initial-scale=1"name=viewport><title>SK results</title><style>tr{border-bottom:1px solid #ddd}table{width:95vw}th{text-align:left}</style><body>';
-        let header = "<tr>";
-        let neww = header;
-        let old = header;
-
-        Object.keys(obj).forEach(key => {
-            header += `<th>${key}</th>`;
-            old += `<td>${obj[key]['old']}</td>`;
-            neww += `<td>${obj[key]['new']}</td>`;
-        });
-
-        header += "</tr>";
-        neww += "</tr>";
-        old += "</tr>";
-        text += `<table>${header+old+neww}</table></body></html>`;
-
-        res.writeHead(200, {'Content-Type': 'text/html'}); // Response header
-        res.end(text); // Response
-    }).catch((err) => {
-        // Error handling
-        res.writeHead(500, {'Content-Type': 'text/plain'});
-        res.end('Error while fetching data from API\n' + String(err));
-        console.error(err);
+    </style>
+</head>
+<body>
+    <h1>🎲 Satta King Complete Results 🎲</h1>
+    <div class="table-container">
+        <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>`;
+    
+    // Add headers
+    headers.forEach(header => {
+        html += `<th>${header}</th>`;
     });
+    
+    html += `</tr></thead><tbody>`;
+    
+    // Add data rows
+    data.forEach((row, index) => {
+        html += `<tr>`;
+        html += `<td class="date-column">${row.date}</td>`;
+        
+        headers.forEach(header => {
+            const value = row[header] || 'XX';
+            const cellClass = value === 'XX' ? 'no-data' : '';
+            html += `<td class="${cellClass}">${value}</td>`;
+        });
+        
+        html += `</tr>`;
+    });
+    
+    html += `</tbody></table>
+    </div>
+</body>
+</html>`;
+    
+    return html;
+}
+
+const server = http.createServer(async (req, res) => {
+    try {
+        const response = await axios.get("https://satta-king-fast.com", {
+            timeout: 10000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+        
+        const $ = cheerio.load(response.data);
+        
+        // Check if user wants JSON data
+        if (req.headers['accept'] === 'application/json' || req.url.includes('json')) {
+            const tableData = scrapeCompleteTable($);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(tableData, null, 2));
+            return;
+        }
+        
+        // Check if user wants plain text (for bots/APIs)
+        if (!req.headers['user-agent'] || !req.headers['user-agent'].includes('Mozilla')) {
+            const tableData = scrapeCompleteTable($);
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            
+            let textOutput = 'SATTA KING RESULTS\n';
+            textOutput += '='.repeat(50) + '\n\n';
+            
+            tableData.data.forEach((row, index) => {
+                textOutput += `${index === 0 ? '*** LATEST *** ' : ''}${row.date}\n`;
+                tableData.headers.forEach(header => {
+                    const value = row[header] || 'XX';
+                    textOutput += `${header}: ${value}\n`;
+                });
+                textOutput += '-'.repeat(30) + '\n';
+            });
+            
+            res.end(textOutput);
+            return;
+        }
+        
+        // Default: Return HTML table
+        const tableData = scrapeCompleteTable($);
+        const html = generateHTMLTable(tableData);
+        
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(html);
+        
+    } catch (error) {
+        console.error('Error scraping data:', error);
+        res.writeHead(500, { 'Content-Type': 'text/html' });
+        res.end(`
+            <html>
+                <body style="font-family: Arial; text-align: center; margin-top: 50px;">
+                    <h2>❌ Error fetching data</h2>
+                    <p>Unable to fetch data from Satta King website.</p>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p><a href="javascript:location.reload()">Try Again</a></p>
+                </body>
+            </html>
+        `);
+    }
 });
 
-// Port aur host define karna
 const PORT = process.env.PORT || 3000;
-const HOST = 'localhost';
+const HOST = process.env.HOST || 'localhost';
 
-server.listen(PORT, HOST, () => { // Server ko listen karne ke liye kahna
-    console.log(`Server is running at http://${HOST}:${PORT}`);
+server.listen(PORT, HOST, () => {
+    console.log(`🚀 Satta King Scraper Server running at http://${HOST}:${PORT}`);
+    console.log(`📊 Access modes:`);
+    console.log(`   • HTML Table: http://${HOST}:${PORT}`);
+    console.log(`   • JSON Data: http://${HOST}:${PORT}?json=1`);
+    console.log(`   • Text Format: Use non-browser user-agent`);
 });
