@@ -55,12 +55,16 @@ function generateInitialHTML(headers, initialData) {
     <style>
         body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
         h1 { text-align: center; color: #333; margin: 20px 0 30px 0; font-size: 36px; }
-        .table-container { width: 100%; overflow-x: auto; }
+        .table-container { width: 100%; }
         table { width: 100%; border-collapse: collapse; margin: 0; }
         th, td { padding: 20px 12px; text-align: center; border: 1px solid #ddd; }
         th { background-color: #4CAF50; color: white; font-weight: bold; position: sticky; top: 0; font-size: 24px; }
-        th:first-child, td:first-child { width: 120px; font-size: 22px; font-weight: bold; }
-        th:not(:first-child), td:not(:first-child) { width: 150px; font-size: 32px; font-weight: bold; }
+        th:first-child, td:first-child {
+            width: 150px; /* Badi screen par Date column ki width set kar di hai */
+            font-size: 22px;
+            font-weight: bold;
+        }
+        th:not(:first-child), td:not(:first-child) { font-size: 32px; font-weight: bold; }
         tr:nth-child(even) { background-color: #f9f9f9; }
         .date-column { background-color: #e8f5e8; font-weight: bold; }
         .no-data { color: #999; font-style: italic; }
@@ -68,6 +72,28 @@ function generateInitialHTML(headers, initialData) {
         #toggleButton { display: block; margin: 20px auto; padding: 10px 20px; font-size: 16px; cursor: pointer; border: 1px solid #4CAF50; background-color: white; color: #4CAF50; border-radius: 5px; transition: background-color 0.3s, color 0.3s; }
         #toggleButton:hover { background-color: #4CAF50; color: white; }
         #toggleButton:disabled { background-color: #ccc; cursor: not-allowed; }
+
+        /* --- MEDIA QUERY FOR MOBILE RESPONSIVENESS --- */
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 24px;
+                margin: 20px 10px;
+            }
+            th {
+                font-size: 14px;
+                padding: 12px 4px;
+            }
+            td {
+                padding: 12px 4px;
+            }
+            th:first-child, td:first-child {
+                width: auto; /* Chhoti screen par Date column ki fixed width hata di */
+                font-size: 14px;
+            }
+            th:not(:first-child), td:not(:first-child) {
+                font-size: 20px;
+            }
+        }
     </style>
 </head>
 <body>
