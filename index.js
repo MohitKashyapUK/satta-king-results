@@ -1,4 +1,6 @@
 const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
 const axios = require('axios');
 const cheerio = require('cheerio');
 
@@ -186,7 +188,26 @@ const server = http.createServer(async (req, res) => {
     try {
         // --- YAHAN ROUTING LOGIC ADD KIYA GAYA HAI ---
 
-        // 1. Agar koi /all-results maange to poora data JSON mein bhej do
+        // 1. Favicon.ico route - same folder se serve karein
+        if (req.url === '/favicon.ico') {
+            const faviconPath = path.join(__dirname, 'favicon.ico');
+            
+            // Check if file exists
+            if (fs.existsSync(faviconPath)) {
+                const faviconData = fs.readFileSync(faviconPath);
+                res.writeHead(200, { 
+                    'Content-Type': 'image/x-icon'
+                });
+                res.end(faviconData);
+            } else {
+                // Agar favicon file nahi mili to 404 return karein
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('Favicon not found');
+            }
+            return;
+        }
+
+        // 2. Agar koi /all-results maange to poora data JSON mein bhej do
         if (req.url === '/all-results') {
             const tableData = await scrapeData();
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -194,7 +215,7 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
-        // 2. Agar koi JSON data maange (purana logic)
+        // 3. Agar koi JSON data maange (purana logic)
         if (req.headers['accept'] === 'application/json' || req.url.includes('json')) {
             const tableData = await scrapeData();
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -202,7 +223,7 @@ const server = http.createServer(async (req, res) => {
             return;
         }
         
-        // 3. Initial Page Load (Default)
+        // 4. Initial Page Load (Default)
         const { headers, data } = await scrapeData();
         const lastTwoResults = data.slice(-2); // Sirf aakhiri 2 results
         const html = generateInitialHTML(headers, lastTwoResults);
@@ -216,7 +237,7 @@ const server = http.createServer(async (req, res) => {
         res.end(`
             <html>
                 <body style="font-family: Arial; text-align: center; margin-top: 50px;">
-                    <h2>❌ Error fetching data</h2>
+                    <h2>⚠️ Error fetching data</h2>
                     <p>Unable to fetch data from Satta King website.</p>
                     <p><strong>Error:</strong> ${error.message}</p>
                     <p><a href="javascript:location.reload()">Try Again</a></p>
@@ -233,4 +254,5 @@ server.listen(PORT, HOST, () => {
     console.log(`🚀 Satta King Scraper Server running at http://${HOST}:${PORT}`);
     console.log(`   • Initial page (2 results): http://${HOST}:${PORT}`);
     console.log(`   • Full data API: http://${HOST}:${PORT}/all-results`);
+    console.log(`   • Favicon: http://${HOST}:${PORT}/favicon.ico`);
 });
