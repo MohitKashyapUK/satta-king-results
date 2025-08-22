@@ -4,8 +4,6 @@
     { "src": "index.js", "use": "@vercel/node" }
   ],
   "routes": [
-    { "src": "/favicon.ico", "dest": "favicon.ico" },
     { "src": "/(.*)", "dest": "index.js" }
   ]
 }
-
