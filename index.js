@@ -210,6 +210,8 @@ const server = http.createServer(async (req, res) => {
         // 2. Agar koi /all-results maange to poora data JSON mein bhej do
         if (req.url === '/all-results') {
             const tableData = await scrapeData();
+            // Sirf aakhiri 2 results
+            tableData.data = tableData.data.slice(-2);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(tableData));
             return;
