@@ -211,7 +211,7 @@ const server = http.createServer(async (req, res) => {
         if (req.url === '/all-results') {
             const tableData = await scrapeData();
             // Sirf aakhiri 2 results
-            tableData.data = tableData.data.slice(-2);
+            // tableData.data = tableData.data.slice(-2); // This line was causing only the last 2 results to be sent. Removed to send all results.
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(tableData));
             return;
