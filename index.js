@@ -4,6 +4,28 @@ const path = require('node:path');
 const axios = require('axios');
 const cheerio = require('cheerio');
 
+// Helper function to process game results logic
+function getGameResult(data, key) {
+    if (!data || data.length === 0) return 'XX';
+
+    // Priority 1: Check last available result (Latest)
+    const latest = data[data.length - 1];
+    if (latest && latest[key] && latest[key] !== 'XX') {
+        return latest[key];
+    }
+
+    // Priority 2: Check second-last result (Old)
+    if (data.length >= 2) {
+        const previous = data[data.length - 2];
+        if (previous && previous[key] && previous[key] !== 'XX') {
+            return previous[key] + '.';
+        }
+    }
+
+    // Fallback
+    return 'XX';
+}
+
 // Helper function to scrape the data. Ise alag kar diya taaki dobara use kar sakein.
 async function scrapeData() {
     const response = await axios.get("https://satta-king-fast.com", {
@@ -11,25 +33,25 @@ async function scrapeData() {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
     });
     const $ = cheerio.load(response.data);
-    
+
     const table = $('#mix-chart > table tr');
     let completeData = [];
-    
+
     const headers = [];
     const headerRow = table.eq(1);
     headerRow.find('th').each((i, el) => {
         headers.push($(el).text().trim());
     });
-    
+
     for (let i = 2; i < table.length - 2; i++) {
         const row = table.eq(i);
         const cells = row.children();
-        
+
         if (cells.length > 0) {
             let rowData = {};
             const dateCell = cells.first();
             rowData.date = dateCell.attr('title') || dateCell.text().trim();
-            
+
             cells.not(':first-child').each((j, cell) => {
                 if (j < headers.length) {
                     rowData[headers[j]] = $(cell).text().trim();
@@ -38,7 +60,7 @@ async function scrapeData() {
             completeData.push(rowData);
         }
     }
-    
+
     // Poora data headers ke saath return karein
     return { headers, data: completeData };
 }
@@ -47,7 +69,7 @@ async function scrapeData() {
 // Yeh function ab initial HTML banayega
 function generateInitialHTML(headers, initialData) {
     const totalRows = initialData.length;
-    
+
     let html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -124,13 +146,13 @@ function generateInitialHTML(headers, initialData) {
         html += `<tr>
             <td class="date-column">${row.date}</td>
             ${headers.map(header => {
-                const value = row[header] || 'XX';
-                const cellClass = value === 'XX' ? 'no-data' : '';
-                return `<td class="${cellClass}">${value}</td>`;
-            }).join('')}
+            const value = row[header] || 'XX';
+            const cellClass = value === 'XX' ? 'no-data' : '';
+            return `<td class="${cellClass}">${value}</td>`;
+        }).join('')}
         </tr>`;
     });
-    
+
     html += `</tbody>
         </table>
     </div>
@@ -179,7 +201,7 @@ function generateInitialHTML(headers, initialData) {
     </script>
 </body>
 </html>`;
-    
+
     return html;
 }
 
@@ -191,11 +213,11 @@ const server = http.createServer(async (req, res) => {
         // 1. Favicon.ico route - same folder se serve karein
         if (req.url === '/favicon.ico') {
             const faviconPath = path.join(__dirname, 'favicon.ico');
-            
+
             // Check if file exists
             if (fs.existsSync(faviconPath)) {
                 const faviconData = fs.readFileSync(faviconPath);
-                res.writeHead(200, { 
+                res.writeHead(200, {
                     'Content-Type': 'image/x-icon'
                 });
                 res.end(faviconData);
@@ -217,6 +239,55 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
+        // --- NEW STRING ENDPOINTS ---
+
+        // Map for easy lookup: route -> data key
+        const gameMap = {
+            '/faridabad-string': 'FRBD',
+            '/gaziabad-string': 'GZBD',
+            '/gali-string': 'GALI',
+            '/disawar-string': 'DSWR'
+        };
+
+        // Handle individual game string routes
+        if (gameMap[req.url]) {
+            const { data } = await scrapeData();
+            const key = gameMap[req.url];
+            const result = getGameResult(data, key);
+
+            // Format: "Name [Value]"
+            const displayNames = {
+                '/faridabad-string': 'Faridabad',
+                '/gaziabad-string': 'Gaziabad',
+                '/gali-string': 'Gali',
+                '/disawar-string': 'Disawar'
+            };
+
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end(`${displayNames[req.url]} ${result}`);
+            return;
+        }
+
+        // Handle /sk-string (Combined)
+        if (req.url === '/sk-string') {
+            const { data } = await scrapeData();
+
+            // Use the data from the last row for the Date header
+            const lastRow = data[data.length - 1];
+            const date = lastRow ? lastRow.date : 'Unknown Date';
+
+            const fbd = getGameResult(data, 'FRBD');
+            const gb = getGameResult(data, 'GZBD');
+            const gali = getGameResult(data, 'GALI');
+            const ds = getGameResult(data, 'DSWR');
+
+            const responseText = `${date}\n\nFaridabad ${fbd}\nGaziabad ${gb}\nGali ${gali}\nDisawar ${ds}`;
+
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end(responseText);
+            return;
+        }
+
         // 3. Agar koi JSON data maange (purana logic)
         if (req.headers['accept'] === 'application/json' || req.url.includes('json')) {
             const tableData = await scrapeData();
@@ -224,15 +295,15 @@ const server = http.createServer(async (req, res) => {
             res.end(JSON.stringify(tableData, null, 2));
             return;
         }
-        
+
         // 4. Initial Page Load (Default)
         const { headers, data } = await scrapeData();
         const lastTwoResults = data.slice(-2); // Sirf aakhiri 2 results
         const html = generateInitialHTML(headers, lastTwoResults);
-        
+
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.end(html);
-        
+
     } catch (error) {
         console.error('Error:', error);
         res.writeHead(500, { 'Content-Type': 'text/html' });
