@@ -30,8 +30,14 @@ function getGameResult(data, key) {
 async function scrapeData() {
     const response = await axios.get("https://satta-king-fast.com/", {
         timeout: 10000,
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        validateStatus: () => true
     });
+
+    if (!response.data || response.data.toString().trim() === '') {
+        throw new Error('Empty response received from the website');
+    }
+
     const $ = cheerio.load(response.data);
 
     // Second table has the monthly data
