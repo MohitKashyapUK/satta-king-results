@@ -26,9 +26,9 @@ function getGameResult(data, key) {
     return 'XX';
 }
 
-// Helper function to scrape the data from satta-king-fast.com
+// Helper function to scrape the data from sattaking-ghaziabad.com
 async function scrapeData() {
-    const response = await axios.get("https://satta-king-fast.com/", {
+    const response = await axios.get("https://sattaking-ghaziabad.com/", {
         timeout: 10000,
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
         validateStatus: () => true
@@ -43,7 +43,7 @@ async function scrapeData() {
     // Second table has the monthly data
     const table = $('table').eq(1);
 
-    const headers = ['DSWR', 'FRBD', 'GZBD', 'GALI'];
+    const headers = ['FRBD', 'GZBD', 'GALI', 'DSWR'];
     const completeData = [];
     
     // Extract month and year from the first row
@@ -77,10 +77,10 @@ async function scrapeData() {
                 
                 const rowData = {
                     date: date,
-                    DSWR: $(cols[1]).text().trim() || 'XX',
-                    FRBD: $(cols[2]).text().trim() || 'XX',
-                    GZBD: $(cols[3]).text().trim() || 'XX',
-                    GALI: $(cols[4]).text().trim() || 'XX'
+                    FRBD: $(cols[1]).text().trim() || 'XX',
+                    GZBD: $(cols[2]).text().trim() || 'XX',
+                    GALI: $(cols[3]).text().trim() || 'XX',
+                    DSWR: $(cols[4]).text().trim() || 'XX'
                 };
                 
                 completeData.push(rowData);
