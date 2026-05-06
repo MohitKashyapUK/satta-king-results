@@ -26,67 +26,112 @@ function getGameResult(data, key) {
     return 'XX';
 }
 
-// Helper function to scrape the data from kingsofsatta.com
+// Helper function to scrape data from sattakingrecords.com monthly record page
 async function scrapeData() {
-    const response = await axios.get("https://kingsofsatta.com/", {
+    // Dynamically build URL using current year and month
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0'); // "01" to "12"
+
+    const url = `https://sattakingrecords.com/satta-king-record.php?year_select=${year}&month_select=${month}`;
+
+    const response = await axios.get(url, {
         timeout: 10000,
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
     });
+
     const $ = cheerio.load(response.data);
 
-    // Game ID mapping from the website
-    const gameMapping = {
-        '116': 'DSWR',    // Desawar
-        '117': 'FRBD',    // Faridabad
-        '119': 'GZBD',    // Ghaziabad
-        '120': 'GALI'     // Gali
+    // Games we want to track (as they appear in the table header)
+    const targetGames = ['DISAWAR', 'FARIDABAD', 'GHAZIABAD', 'GALI'];
+
+    // Internal short keys
+    const gameKeyMap = {
+        'DISAWAR': 'DSWR',
+        'FARIDABAD': 'FRBD',
+        'GHAZIABAD': 'GZBD',
+        'GALI': 'GALI'
     };
 
-    // Extract the JavaScript record array
-    const scriptContent = $('script').text();
-    const recordMatch = scriptContent.match(/var record = (\[.*?\]);/s);
+    let colIndices = {};
+    let dateColIndex = -1;
+    const completeData = [];
 
-    if (!recordMatch) {
-        throw new Error('Could not find record data in the page');
-    }
+    $('table').each((_, table) => {
+        const firstRow = $(table).find('tr').first();
+        const ths = firstRow.find('th, td');
 
-    const recordData = JSON.parse(recordMatch[1]);
+        const tempHeaders = [];
+        ths.each((i, th) => {
+            tempHeaders.push($(th).text().trim().toUpperCase());
+        });
 
-    // Group data by date
-    const dateMap = {};
+        // Only process the table that has a DATE column
+        const dateIdx = tempHeaders.indexOf('DATE');
+        if (dateIdx === -1) return;
 
-    recordData.forEach(item => {
-        // Only process games we care about
-        if (!gameMapping[item.id]) return;
+        dateColIndex = dateIdx;
 
-        const date = item.date;
-        const gameName = gameMapping[item.id];
+        // Find target game column indices
+        colIndices = {};
+        tempHeaders.forEach((h, i) => {
+            if (targetGames.includes(h)) {
+                colIndices[i] = h;
+            }
+        });
 
-        if (!dateMap[date]) {
-            dateMap[date] = { date: date };
-        }
+        // Parse data rows (skip header row)
+        $(table).find('tr').slice(1).each((_, tr) => {
+            const cells = $(tr).find('td');
+            if (cells.length === 0) return;
 
-        dateMap[date][gameName] = item.no;
+            const dayNum = $(cells[dateColIndex]).text().trim();
+            if (!dayNum || isNaN(parseInt(dayNum))) return;
+
+            // Format date as DD-MM-YYYY
+            const day = String(parseInt(dayNum)).padStart(2, '0');
+            const date = `${day}-${month}-${year}`;
+
+            const row = { date };
+            let hasAnyResult = false;
+
+            Object.entries(colIndices).forEach(([colIdx, gameName]) => {
+                const cell = cells[parseInt(colIdx)];
+                const val = cell ? $(cell).text().trim() : '';
+                const shortKey = gameKeyMap[gameName];
+
+                if (val && val !== '--' && val !== '') {
+                    row[shortKey] = val;
+                    hasAnyResult = true;
+                } else {
+                    row[shortKey] = 'XX';
+                }
+            });
+
+            // Only include rows that have at least one real result
+            if (hasAnyResult) {
+                completeData.push(row);
+            }
+        });
+
+        return false; // Stop after first matching table
     });
 
-    // Convert to array and sort by date
-    const completeData = Object.values(dateMap).sort((a, b) => {
-        const dateA = new Date(a.date.split('-').reverse().join('-'));
-        const dateB = new Date(b.date.split('-').reverse().join('-'));
-        return dateA - dateB;
+    // Sort by date ascending (DD-MM-YYYY)
+    completeData.sort((a, b) => {
+        const toISO = (d) => d.split('-').reverse().join('-');
+        return new Date(toISO(a.date)) - new Date(toISO(b.date));
     });
 
-    // Headers for only 4 games
-    const headers = ['DSWR', 'FRBD', 'GZBD', 'GALI'];
-
-    return { headers, data: completeData };
+    const shortHeaders = ['DSWR', 'FRBD', 'GZBD', 'GALI'];
+    return { headers: shortHeaders, data: completeData };
 }
 
 
 // Function to generate initial HTML
 function generateInitialHTML(headers, initialData) {
-    const totalRows = initialData.length;
-
     let html = `<!DOCTYPE html>
     <html lang="en">
     <head>
@@ -123,24 +168,11 @@ function generateInitialHTML(headers, initialData) {
     #toggleButton:disabled { background-color: #ccc; cursor: not-allowed; }
 
     @media (max-width: 480px) {
-        h1 {
-            font-size: 24px;
-            margin: 20px 10px;
-        }
-        th {
-            font-size: 14px;
-            padding: 12px 4px;
-        }
-        td {
-            padding: 12px 4px;
-        }
-        th:first-child, td:first-child {
-            width: 75px;
-            font-size: 14px;
-        }
-        th:not(:first-child), td:not(:first-child) {
-            font-size: 20px;
-        }
+        h1 { font-size: 24px; margin: 20px 10px; }
+        th { font-size: 14px; padding: 12px 4px; }
+        td { padding: 12px 4px; }
+        th:first-child, td:first-child { width: 75px; font-size: 14px; }
+        th:not(:first-child), td:not(:first-child) { font-size: 20px; }
     }
     </style>
     </head>
@@ -156,7 +188,6 @@ function generateInitialHTML(headers, initialData) {
     </thead>
     <tbody>`;
 
-    // Initial data (last 2 results)
     initialData.forEach(row => {
         html += `<tr>
         <td class="date-column">${row.date}</td>
@@ -182,14 +213,11 @@ function generateInitialHTML(headers, initialData) {
         toggleButton.disabled = true;
 
         try {
-            // Fetch all data from API
             const response = await fetch('/all-results');
             const fullData = await response.json();
 
-            // Clear table body
             tableBody.innerHTML = '';
 
-            // Create new table rows
             fullData.data.forEach(row => {
                 let rowHtml = '<tr>';
                 rowHtml += \`<td class="date-column">\${row.date}</td>\`;
@@ -204,7 +232,6 @@ function generateInitialHTML(headers, initialData) {
                 tableBody.innerHTML += rowHtml;
             });
 
-            // Hide button
             toggleButton.style.display = 'none';
 
         } catch (error) {
@@ -223,15 +250,12 @@ function generateInitialHTML(headers, initialData) {
 
 const server = http.createServer(async (req, res) => {
     try {
-        // Favicon.ico route
+        // Favicon route
         if (req.url === '/favicon.ico') {
             const faviconPath = path.join(__dirname, 'favicon.ico');
-
             if (fs.existsSync(faviconPath)) {
                 const faviconData = fs.readFileSync(faviconPath);
-                res.writeHead(200, {
-                    'Content-Type': 'image/x-icon'
-                });
+                res.writeHead(200, { 'Content-Type': 'image/x-icon' });
                 res.end(faviconData);
             } else {
                 res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -262,7 +286,6 @@ const server = http.createServer(async (req, res) => {
             const key = gameMap[req.url];
             const result = getGameResult(data, key);
 
-            // Format: "Name [Value]"
             const displayNames = {
                 '/faridabad-string': 'Faridabad',
                 '/gaziabad-string': 'Gaziabad',
@@ -279,7 +302,6 @@ const server = http.createServer(async (req, res) => {
         if (req.url === '/sk-string') {
             const { data } = await scrapeData();
 
-            // Use the data from the last row for the Date header
             const lastRow = data[data.length - 1];
             const date = lastRow ? lastRow.date : 'Unknown Date';
 
@@ -303,9 +325,9 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
-        // Initial Page Load (Default)
+        // Default: Initial Page Load (last 2 results)
         const { headers, data } = await scrapeData();
-        const lastTwoResults = data.slice(-2); // Last 2 results only
+        const lastTwoResults = data.slice(-2);
         const html = generateInitialHTML(headers, lastTwoResults);
 
         res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -333,12 +355,12 @@ const HOST = process.env.HOST || 'localhost';
 server.listen(PORT, HOST, () => {
     console.log(`🚀 Satta King Scraper Server running at http://${HOST}:${PORT}`);
     console.log(`   • Initial page (2 results): http://${HOST}:${PORT}`);
-    console.log(`   • Full data API: http://${HOST}:${PORT}/all-results`);
+    console.log(`   • Full data API:             http://${HOST}:${PORT}/all-results`);
     console.log(`   • Individual game strings:`);
     console.log(`     - Faridabad: http://${HOST}:${PORT}/faridabad-string`);
-    console.log(`     - Gaziabad: http://${HOST}:${PORT}/gaziabad-string`);
-    console.log(`     - Gali: http://${HOST}:${PORT}/gali-string`);
-    console.log(`     - Disawar: http://${HOST}:${PORT}/disawar-string`);
+    console.log(`     - Gaziabad:  http://${HOST}:${PORT}/gaziabad-string`);
+    console.log(`     - Gali:      http://${HOST}:${PORT}/gali-string`);
+    console.log(`     - Disawar:   http://${HOST}:${PORT}/disawar-string`);
     console.log(`   • Combined string: http://${HOST}:${PORT}/sk-string`);
-    console.log(`   • Favicon: http://${HOST}:${PORT}/favicon.ico`);
+    console.log(`   • Favicon:         http://${HOST}:${PORT}/favicon.ico`);
 });
